@@ -1,5 +1,5 @@
 2025-07-17:
-1.pyspark:写完了dim和dwd,dws写了一半
+1.pyspark:写完了dim和dwd,dws,差ads
 2.解决了hive版本和hadoop版本不兼容的问题
 3.完成了gif上传
 
