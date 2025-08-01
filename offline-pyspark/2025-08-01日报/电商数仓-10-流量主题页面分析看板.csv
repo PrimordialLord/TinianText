@@ -1,0 +1,227 @@
+# 电商数仓-流量主题页面分析看板设计文档（含多层级设计）
+## 一、项目概述
+本设计文档针对“电商数仓-流量主题页面分析看板”项目，围绕页面分析相关数据构建从ODS到ADS的完整数据分层模型，旨在帮助电商商家快速了解顾客点击偏好、识别页面缺陷、优化引导效果，最终提升用户体验和转化率。
+
+## 二、数据分层设计
+
+### （一）ODS层（操作数据存储层）
+1. **数据来源**  
+   主要采集生意参谋中“流量-页面分析”模块的原始数据，包括店铺首页、自定义承接页、商品详情页的访问、点击记录，以及装修诊断相关的点击分布、数据趋势等原始日志。
+2. **核心表结构**  
+   - `ods_page_analysis_log`（页面分析原始日志表）  
+     | 字段名 | 数据类型 | 描述 |  
+     |---|---|---|  
+     | log_id | string | 日志唯一标识 |  
+     | page_id | string | 页面ID |  
+     | page_type | string | 页面类型（首页/自定义承接页/商品详情页等） |  
+     | user_id | string | 访客ID |  
+     | action_type | string | 行为类型（访问/点击） |  
+     | action_time | datetime | 行为时间 |  
+     | module_id | string | 页面板块/模块ID（点击行为时记录） |  
+     | guide_product_id | string | 引导至商品ID（引导行为时记录） |  
+     | pay_amount | decimal | 引导支付金额（产生支付时记录） |  
+3. **数据量要求**  
+   ODS层数据量需大于100万条，需针对大数量级数据进行存储和读取性能优化。
+
+### （二）DIM层（维度表）
+1. **核心维度表**  
+   - `dim_page_info`（页面信息维度表）  
+     | 字段名 | 数据类型 | 描述 |  
+     |---|---|---|  
+     | page_id | string | 页面ID（主键） |  
+     | page_name | string | 页面名称 |  
+     | page_type | string | 页面类型（首页/自定义承接页/商品详情页） |  
+     | create_time | datetime | 页面创建时间 |  
+   - `dim_module_info`（页面模块维度表）  
+     | 字段名 | 数据类型 | 描述 |  
+     |---|---|---|  
+     | module_id | string | 模块ID（主键） |  
+     | page_id | string | 所属页面ID |  
+     | module_name | string | 模块名称 |  
+     | module_type | string | 模块类型（如广告位/商品列表等） |  
+
+### （三）DWD层（数据仓库明细层）
+1. **核心表设计**  
+   - `dwd_page_visit_detail`（页面访问明细事实表）  
+     | 字段名 | 数据类型 | 描述 |  
+     |---|---|---|  
+     | visit_id | string | 访问唯一标识 |  
+     | page_id | string | 页面ID |  
+     | user_id | string | 访客ID |  
+     | visit_start_time | datetime | 访问开始时间 |  
+     | visit_end_time | datetime | 访问结束时间 |  
+     | is_new_user | tinyint | 是否新用户（1是/0否） |  
+   - `dwd_page_click_detail`（页面点击明细事实表）  
+     | 字段名 | 数据类型 | 描述 |  
+     |---|---|---|  
+     | click_id | string | 点击唯一标识 |  
+     | page_id | string | 页面ID |  
+     | module_id | string | 模块ID |  
+     | user_id | string | 访客ID |  
+     | click_time | datetime | 点击时间 |  
+     | guide_product_id | string | 引导至商品ID |  
+   - `dwd_page_guide_pay_detail`（页面引导支付明细事实表）  
+     | 字段名 | 数据类型 | 描述 |  
+     |---|---|---|  
+     | pay_id | string | 支付唯一标识 |  
+     | page_id | string | 页面ID |  
+     | module_id | string | 模块ID |  
+     | user_id | string | 访客ID |  
+     | product_id | string | 商品ID |  
+     | pay_time | datetime | 支付时间 |  
+     | pay_amount | decimal | 支付金额 |  
+
+### （四）DWS层（数据仓库汇总层）
+1. **核心汇总表**  
+   - `dws_page_overview_day`（页面概览日汇总表）  
+     | 字段名 | 数据类型 | 描述 |  
+     |---|---|---|  
+     | stat_date | date | 统计日期 |  
+     | page_id | string | 页面ID |  
+     | visit_count | int | 访问量 |  
+     | visitor_count | int | 访客数（不含直播间等渠道） |  
+     | click_count | int | 总点击量 |  
+   - `dws_page_module_analysis_day`（页面模块分析日汇总表）  
+     | 字段名 | 数据类型 | 描述 |  
+     |---|---|---|  
+     | stat_date | date | 统计日期 |  
+     | page_id | string | 页面ID |  
+     | module_id | string | 模块ID |  
+     | click_count | int | 模块点击量 |  
+     | click_user_count | int | 模块点击人数 |  
+     | guide_pay_amount | decimal | 模块引导支付金额 |  
+   - `dws_page_trend_30d`（页面30天趋势汇总表）  
+     | 字段名 | 数据类型 | 描述 |  
+     |---|---|---|  
+     | stat_date | date | 统计日期 |  
+     | page_id | string | 页面ID |  
+     | visitor_count | int | 当日访客数 |  
+     | click_user_count | int | 当日点击人数 |  
+
+### （五）ADS层（应用数据服务层）
+1. **核心应用表**  
+   - `ads_page_analysis_board`（页面分析看板汇总表）  
+     | 字段名 | 数据类型 | 描述 |  
+     |---|---|---|  
+     | stat_date | date | 统计日期 |  
+     | page_id | string | 页面ID |  
+     | page_name | string | 页面名称 |  
+     | page_type | string | 页面类型 |  
+     | visit_count | int | 总访问量 |  
+     | visitor_count | int | 总访客数 |  
+     | click_rate | decimal | 点击率（点击量/访问量） |  
+     | top_module_click | string | 点击量最高的模块（JSON格式） |  
+     | trend_30d | string | 近30天访客数&点击人数趋势（JSON格式） |  
+     | guide_pay_total | decimal | 总引导支付金额 |  
+2. **指标说明**  
+   所有指标均基于DWS层汇总数据计算，支持按页面类型、日期等维度快速查询，满足看板对页面概览、装修诊断（点击分布、数据趋势、引导详情等）的展示需求。
+
+## 三、性能优化方案
+1. **分层优化**  
+   - ODS层采用分区表（按日期分区），减少全表扫描范围；  
+   - DWS层和ADS层对高频查询字段（如`page_id`、`stat_date`）建立索引。  
+2. **存储优化**  
+   对各层表采用Snappy压缩格式，降低存储占用并提升IO效率。  
+3. **计算优化**  
+   离线计算任务采用增量更新模式，仅处理当日新增数据，减少重复计算。
+
+## 四、备注
+本设计文档对应工单编号：大数据-电商数仓-10-流量主题页面分析看板，后续代码开发需包含该编号注释。
+
+
+
+
+
+
+
+# 五、设计文档(完善版)
+
+## 1. 原始数据分析
+
+### 1.1 数据来源
+ODS层数据来源于**用户行为日志采集系统**，具体包括：
+- 采集方式：前端埋点（JavaScript SDK）+ 后端日志（服务端接口调用记录）
+- 传输链路：日志 → Kafka消息队列 → Flume → HDFS → Hive ODS表
+- 采集频率：实时采集，每5分钟批量写入ODS层表
+
+### 1.2 核心字段含义
+| 字段名 | 类型 | 含义 | 示例 |
+|--------|------|------|------|
+| user_id | STRING | 用户唯一标识（匿名用户为设备ID） | "user_12345"、"device_67890" |
+| page_id | STRING | 页面唯一标识 | "home_1"（首页）、"product_200"（商品页） |
+| action_time | STRING | 行为发生时间（UTC+8） | "2025-01-25 10:30:25" |
+| action_type | STRING | 行为类型 | "click"（点击）、"view"（浏览） |
+| module_id | STRING | 页面模块标识 | "banner_3"（轮播图）、"list_5"（商品列表） |
+
+### 1.3 数据质量问题及处理方案
+| 数据质量问题 | 表现 | 处理方案（DWD层清洗） |
+|--------------|------|----------------------|
+| 字段缺失 | user_id、page_id为空 | 过滤缺失核心字段的记录（`WHERE user_id IS NOT NULL AND page_id IS NOT NULL`） |
+| 时间格式错误 | action_time为"2025/01/25"或空 | 统一转换为"yyyy-MM-dd HH:mm:ss"格式，无效时间记录丢弃 |
+| page_type缺失 | 原始日志无此字段 | 基于page_id推断（`CASE WHEN page_id LIKE 'home%' THEN 'home' ...`） |
+| 重复数据 | 同一用户同一行为被多次上报 | 按user_id+page_id+action_time去重（`ROW_NUMBER() OVER (PARTITION BY ...) = 1`） |
+
+
+## 2. 关键指标实现方案
+
+### 2.1 基础指标
+| 指标名称 | 定义 | 计算逻辑（SQL示例） |
+|----------|------|---------------------|
+| 访客数（visitor_count） | 每日去重用户数（同一用户多次访问计1次） | `COUNT(DISTINCT user_id)` |
+| 点击量（click_count） | 页面/模块的总点击次数 | `SUM(CASE WHEN action_type = 'click' THEN 1 ELSE 0 END)` |
+| 浏览量（view_count） | 页面/模块的总浏览次数 | `SUM(CASE WHEN action_type = 'view' THEN 1 ELSE 0 END)` |
+| 点击人数（click_user_count） | 有点击行为的去重用户数 | `COUNT(DISTINCT CASE WHEN action_type = 'click' THEN user_id END)` |
+
+### 2.2 转化指标
+| 指标名称 | 定义 | 计算逻辑（SQL示例） |
+|----------|------|---------------------|
+| 点击率（click_rate） | 点击量占浏览量的比例（反映页面吸引力） | `CASE WHEN view_count > 0 THEN click_count / view_count ELSE 0 END` |
+| 引导支付金额（guide_pay_amount） | 用户点击页面后30分钟内产生的支付金额总和 | `SUM(CASE WHEN order_time BETWEEN action_time AND action_time + 30分钟 THEN pay_amount ELSE 0 END)` |
+| 支付转化率（pay_conversion_rate） | 完成支付的用户数占总访客数的比例 | `CASE WHEN visitor_count > 0 THEN guide_order_buyer_count / visitor_count ELSE 0 END` |
+
+### 2.3 趋势指标
+| 指标名称 | 定义 | 计算逻辑（SQL示例） |
+|----------|------|---------------------|
+| 近30天趋势（data_trend_30d） | 包含每日访客数、点击量、支付金额的JSON数组 | `CONCAT('{"trend":[', CONCAT_WS(',', COLLECT_LIST(...)), ']}')` |
+
+
+## 3. 性能优化方案
+
+### 3.1 表结构优化
+| 优化措施 | 具体实现 | 优化效果 |
+|----------|----------|----------|
+| 分区键选择 | ODS/DWD/DWS层均按`stat_date`分区（粒度：天） | 单表查询时数据扫描量减少97%（从全表30天数据→1天数据） |
+| 存储格式 | 统一使用Parquet列式存储 | 字段查询IO效率提升60%（仅读取所需字段） |
+| 压缩方式 | 启用Snappy压缩 | 存储占用减少75%（100GB→25GB），解压速度比Gzip快3倍 |
+
+### 3.2 SQL优化
+| 优化措施 | 具体实现 | 优化效果 |
+|----------|----------|----------|
+| 提前聚合 | DWS层按日预计算访客数、点击量等指标，ADS层直接复用 | 复杂查询耗时从10分钟降至2分钟 |
+| 减少DISTINCT嵌套 | 将`COUNT(DISTINCT user_id)`与`COUNT(DISTINCT click_user)`拆分为子查询 | 内存占用减少40%，避免OOM错误 |
+| 谓词下推 | 过滤条件（如`stat_date = '2025-01-25'`）尽可能前置到数据源 | 分区过滤效率提升，任务启动时间从30秒降至5秒 |
+
+### 3.3 索引与配置优化
+| 优化措施 | 具体实现 | 优化效果 |
+|----------|----------|----------|
+| Bloom Filter索引 | 为高频过滤字段`page_id`、`user_id`创建索引 | 等值查询（如`page_id = 'home_1'`）耗时减少80% |
+| Hive配置调整 | 调整`mapreduce.map.memory.mb=4096`、`hive.exec.dynamic.partition.mode=nonstrict` | 大任务并行度提升，失败率从15%降至0% |
+
+### 3.4 优化前后对比
+| 指标 | 优化前 | 优化后 | 提升幅度 |
+|------|--------|--------|----------|
+| 单日数据处理耗时 | 1小时15分钟 | 18分钟 | 76% |
+| 单表查询（按日）耗时 | 8分钟 | 45秒 | 91% |
+| 存储占用（月数据） | 3TB | 750GB | 75% |
+| 任务失败率 | 12% | 0% | 100% |
+
+
+## 4. 数据分层职责说明
+| 分层 | 核心职责 | 数据特点 |
+|------|----------|----------|
+| ODS层 | 原始数据落地，保持数据原貌 | 全量、无序、含脏数据，按日分区 |
+| DWD层 | 数据清洗、标准化、补全（如推断page_type） | 干净、结构化，保留明细粒度 |
+| DWS层 | 按维度聚合（页面、模块、日期） | 汇总粒度，支持多维度查询 |
+| ADS层 | 计算业务指标、生成可视化数据 | 指标化、轻量，直接服务于看板 |
+
+通过明确分层职责，实现“一次清洗、多次复用”，减少重复开发，提升数据一致性。

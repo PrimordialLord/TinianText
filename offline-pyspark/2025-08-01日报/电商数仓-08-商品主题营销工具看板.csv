@@ -1,0 +1,81 @@
+# 营销工具客服专属优惠看板设计文档
+## 一、引言
+### （一）背景
+客服专属优惠是用于客服跟消费者聊天场景的专属工具，直接在商品金额上立减，支持和其他优惠叠加且不计入最低价，能帮助商家提高客服询单转化率，整体提升店铺销量。为了让电商商家更好地查看客服专属优惠的活动效果，特设计本营销工具客服专属优惠看板。
+
+### （二）目的
+本设计文档旨在详细阐述营销工具客服专属优惠看板的设计思路、实现方案等，为开发人员提供明确的开发指导，确保看板能够准确、高效地展示相关数据，满足商家的需求。
+
+## 二、ADS层表设计
+### （一）表名
+`ads_customer_service_exclusive_discount`
+
+### （二）字段信息
+|字段名称|字段类型|描述|
+| ---- | ---- | ---- |
+|`activity_id`|STRING|活动编号|
+|`activity_name`|STRING|活动名称|
+|`activity_level`|STRING|活动级别（商品级/SKU级）|
+|`discount_type`|STRING|优惠类型（固定优惠/自定义优惠）|
+|`discount_amount`|INT|优惠金额|
+|`start_time`|TIMESTAMP|活动开始时间|
+|`end_time`|TIMESTAMP|活动结束时间|
+|`send_count`|INT|发送次数|
+|`pay_count`|INT|支付次数|
+|`total_pay_amount`|DECIMAL(10,2)|累计支付金额|
+|`pay_buyer_count`|INT|支付买家数|
+|`customer_service_id`|STRING|客服ID|
+|`customer_service_name`|STRING|客服姓名|
+|`dt`|STRING|日期分区|
+
+## 三、原始数据分析
+### （一）数据来源
+数据来源于电商平台的业务数据库，包括客服专属优惠活动的创建信息、发送信息、核销信息以及订单支付信息等。
+
+### （二）数据特点
+1. 数据具有时间属性，需要按日、7天、30天等时间维度进行统计分析。
+2. 数据涉及多个维度，如活动、客服、商品等，需要进行多维度的聚合分析。
+3. 存在支付次数大于发送次数的情况，因为优惠的使用周期有24小时，统计某一天的发送次数和支付次数时，会包含前一天发送的优惠在当天支付的订单。
+
+## 四、关键指标实现方案
+### （一）数据概览指标
+1. **30天、7天、昨天的发送及核销概览数据**
+- 实现思路：通过对`send_count`（发送次数）、`pay_count`（支付次数）、`total_pay_amount`（累计支付金额）等字段按不同时间周期进行聚合计算。
+- 具体SQL示例（以30天为例）：
+```sql
+SELECT SUM(send_count) AS total_send_count, SUM(pay_count) AS total_pay_count, SUM(total_pay_amount) AS total_pay_amount
+FROM ads_customer_service_exclusive_discount
+WHERE dt BETWEEN DATE_SUB(CURRENT_DATE(), 29) AND CURRENT_DATE();
+```
+
+### （二）客服数据指标
+1. **每个客服发送及核销的情况**
+- 实现思路：按`customer_service_id`和`customer_service_name`分组，对发送次数、支付次数等指标进行聚合。
+- 具体SQL示例：
+```sql
+SELECT customer_service_id, customer_service_name, SUM(send_count) AS send_count, SUM(pay_count) AS pay_count
+FROM ads_customer_service_exclusive_discount
+GROUP BY customer_service_id, customer_service_name;
+```
+
+### （三）发送明细指标
+1. **每一条发送的明细及核销情况**
+- 实现思路：直接查询原始数据中的相关字段，如活动编号、活动名称、发送时间、支付时间等。
+- 具体SQL示例：
+```sql
+SELECT activity_id, activity_name, send_time, pay_time, discount_amount
+FROM ads_customer_service_exclusive_discount;
+```
+
+### （四）活动效果指标
+1. **不同状态下单个活动效果数据**
+- 实现思路：按活动编号和活动状态分组，对发送次数、支付次数、累计支付金额等指标进行聚合。
+- 具体SQL示例：
+```sql
+SELECT activity_id, activity_name, activity_status, SUM(send_count) AS send_count, SUM(pay_count) AS pay_count, SUM(total_pay_amount) AS total_pay_amount
+FROM ads_customer_service_exclusive_discount
+GROUP BY activity_id, activity_name, activity_status;
+```
+
+## 五、实现思路总结
+本看板的实现将采用Spark 3.2及以上版本，使用PySpark+Sparksql进行开发。首先从业务数据库中抽取原始数据，进行数据清洗和转换，按照数仓分层架构（ODS→DWD→DWS→ADS）逐步处理，最终在ADS层形成满足看板需求的数据。对于看板代码，将实现分层和不分层两种方式，且保证两种方式的指标计算逻辑完全一致。同时，严格遵循代码规范，添加清晰的注释，确保代码的可维护性和可读性。
