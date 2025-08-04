@@ -1,0 +1,219 @@
+# 商品诊断看板测试文档
+## 一、测试基本信息
+|项目名称|电商数仓|
+|----|----|
+|工单编号|大数据-电商数仓-07-商品主题商品诊断看板|
+|测试对象|商品诊断看板|
+|测试时间|2025年8月|
+|测试环境|Spark 3.2及以上版本，使用PySpark+Sparksql|
+
+## 二、测试目的
+验证商品诊断看板的功能是否符合需求，包括全品价值评估和单品竞争力诊断等模块；确保各指标计算准确，分层与不分层两种实现方式的数据一致；检查看板的设计是否满足验收标准，为看板的上线提供可靠依据。
+
+## 三、测试范围
+1. 全品价值评估模块：包括综合评分、评分等级、价格-销量比、访客-销量比、销售金额、销量等指标。
+2. 单品竞争力诊断模块：包括本品与竞品在各维度的指标值、竞品平均值、差距比例、优化建议等内容。
+3. 数据一致性：验证分层（ODS、DWD、DWS、ADS）和不分层实现方式下的数据是否一致。
+
+## 四、测试用例
+### （一）全品价值评估模块测试
+1. **综合评分测试**
+    - 测试目的：验证综合评分计算的准确性。
+    - 测试数据：选取某一商品在DWD层的流量获取、流量转化、内容营销、客户拉新、服务质量等指标数据。
+    - 预期结果：按照综合评分计算公式（流量获取评分×20% + 流量转化评分×30% + 内容营销评分×10% + 客户拉新评分×20% + 服务质量评分×20%）计算得出的结果与ADS层中该商品的综合评分一致。
+    - 测试SQL：
+```sql
+SELECT
+    a.product_id,
+    a.total_score AS ads_total_score,
+    round(
+        (b.traffic_score * 0.2) + (b.conversion_score * 0.3) + (b.content_score * 0.1) + (b.new_customer_score * 0.2) + (b.service_score * 0.2), 2
+    ) AS calculated_total_score
+FROM
+    ads_product_value_assessment a
+JOIN
+    dws_product_score_summary b ON a.product_id = b.product_id AND a.dt = b.dt
+WHERE
+    a.dt = '2025-08-03'
+LIMIT 10;
+```
+    - 实际结果：[记录实际查询得到的ads_total_score和calculated_total_score]
+    - 测试结论：[根据实际结果判断是否一致，一致则通过，否则不通过]
+2. **评分等级测试**
+    - 测试目的：验证评分等级划分的正确性。
+    - 测试数据：选取不同综合评分的商品数据。
+    - 预期结果：综合评分85分以上为A级，70-85分为B级，50-70分为C级，50分以下为D级，与ADS层中该商品的评分等级一致。
+    - 测试SQL：
+```sql
+SELECT
+    product_id,
+    total_score,
+    score_level,
+    CASE
+        WHEN total_score >= 85 THEN 'A'
+        WHEN total_score >= 70 AND total_score < 85 THEN 'B'
+        WHEN total_score >= 50 AND total_score < 70 THEN 'C'
+        ELSE 'D'
+    END AS expected_score_level
+FROM
+    ads_product_value_assessment
+WHERE
+    dt = '2025-08-03'
+LIMIT 10;
+```
+    - 实际结果：[记录实际查询得到的score_level和expected_score_level]
+    - 测试结论：[根据实际结果判断是否一致，一致则通过，否则不通过]
+3. **价格-销量比测试**
+    - 测试目的：验证价格-销量比计算的准确性。
+    - 测试数据：选取某一商品在DWD层的销量和价格数据。
+    - 预期结果：按照价格-销量比计算公式（销量/价格）计算得出的结果与ADS层中该商品的价格-销量比一致。
+    - 测试SQL：
+```sql
+SELECT
+    a.product_id,
+    a.price_sales_ratio AS ads_price_sales_ratio,
+    round(b.sales_volume / c.price, 4) AS calculated_price_sales_ratio
+FROM
+    ads_product_value_assessment a
+JOIN
+    dwd_product_behavior_detail b ON a.product_id = b.product_id AND a.dt = b.dt
+JOIN
+    dwd_product_base_detail c ON a.product_id = c.product_id AND a.dt = c.dt
+WHERE
+    a.dt = '2025-08-03'
+LIMIT 10;
+```
+    - 实际结果：[记录实际查询得到的ads_price_sales_ratio和calculated_price_sales_ratio]
+    - 测试结论：[根据实际结果判断是否一致，一致则通过，否则不通过]
+4. **访客-销量比测试**
+    - 测试目的：验证访客-销量比计算的准确性。
+    - 测试数据：选取某一商品在DWD层的销量和访客数数据。
+    - 预期结果：按照访客-销量比计算公式（销量/访客数）计算得出的结果与ADS层中该商品的访客-销量比一致。
+    - 测试SQL：
+```sql
+SELECT
+    a.product_id,
+    a.visitor_sales_ratio AS ads_visitor_sales_ratio,
+    round(b.sales_volume / b.visitor_count, 4) AS calculated_visitor_sales_ratio
+FROM
+    ads_product_value_assessment a
+JOIN
+    dwd_product_behavior_detail b ON a.product_id = b.product_id AND a.dt = b.dt
+WHERE
+    a.dt = '2025-08-03'
+LIMIT 10;
+```
+    - 实际结果：[记录实际查询得到的ads_visitor_sales_ratio和calculated_visitor_sales_ratio]
+    - 测试结论：[根据实际结果判断是否一致，一致则通过，否则不通过]
+
+### （二）单品竞争力诊断模块测试
+1. **竞品平均值测试**
+    - 测试目的：验证竞品平均值计算的准确性。
+    - 测试数据：选取某一商品在DWD层的竞品相关数据。
+    - 预期结果：按照同维度竞品平均值计算方式得出的结果与ADS层中该商品的竞品平均值一致。
+    - 测试SQL：
+```sql
+SELECT
+    a.product_id,
+    a.dimension,
+    a.competitor_avg_value AS ads_competitor_avg_value,
+    round(AVG(b.competitor_value) OVER (PARTITION BY b.dimension), 2) AS calculated_competitor_avg_value
+FROM
+    ads_product_competitor_diagnosis a
+JOIN
+    dwd_competitor_detail b ON a.product_id = b.product_id AND a.dimension = b.dimension AND a.dt = b.dt
+WHERE
+    a.dt = '2025-08-03'
+LIMIT 10;
+```
+    - 实际结果：[记录实际查询得到的ads_competitor_avg_value和calculated_competitor_avg_value]
+    - 测试结论：[根据实际结果判断是否一致，一致则通过，否则不通过]
+2. **差距比例测试**
+    - 测试目的：验证差距比例计算的准确性。
+    - 测试数据：选取某一商品在ADS层的本品指标值和竞品平均值数据。
+    - 预期结果：按照差距比例计算公式（（竞品平均值-本品指标值）/竞品平均值×100%）计算得出的结果与ADS层中该商品的差距比例一致。
+    - 测试SQL：
+```sql
+SELECT
+    product_id,
+    dimension,
+    gap_ratio AS ads_gap_ratio,
+    round(
+        CASE
+            WHEN competitor_avg_value > 0 THEN (competitor_avg_value - self_value) / competitor_avg_value * 100
+            ELSE 0
+        END, 2
+    ) AS calculated_gap_ratio
+FROM
+    ads_product_competitor_diagnosis
+WHERE
+    dt = '2025-08-03'
+LIMIT 10;
+```
+    - 实际结果：[记录实际查询得到的ads_gap_ratio和calculated_gap_ratio]
+    - 测试结论：[根据实际结果判断是否一致，一致则通过，否则不通过]
+3. **优化建议测试**
+    - 测试目的：验证优化建议生成的准确性。
+    - 测试数据：选取某一商品在ADS层的差距比例数据。
+    - 预期结果：根据差距比例生成的优化建议与ADS层中该商品的优化建议一致。
+    - 测试SQL：
+```sql
+SELECT
+    product_id,
+    dimension,
+    gap_ratio,
+    optimization_suggestion AS ads_optimization_suggestion,
+    CASE
+        WHEN gap_ratio >= 30 THEN CONCAT('【紧急优化】本品在"', dimension, '"维度落后竞品30%以上，需优先改进')
+        WHEN gap_ratio >= 10 THEN CONCAT('【重点优化】本品在"', dimension, '"维度落后竞品10%-30%，建议针对性提升')
+        WHEN gap_ratio > 0 THEN CONCAT('【轻微优化】本品在"', dimension, '"维度落后竞品0-10%，可微调优化')
+        WHEN gap_ratio <= 0 THEN CONCAT('【保持优势】本品在"', dimension, '"维度优于竞品平均水平，建议维持')
+        ELSE '【数据异常】无法计算差距，需检查原始数据'
+    END AS expected_optimization_suggestion
+FROM
+    ads_product_competitor_diagnosis
+WHERE
+    dt = '2025-08-03'
+LIMIT 10;
+```
+    - 实际结果：[记录实际查询得到的ads_optimization_suggestion和expected_optimization_suggestion]
+    - 测试结论：[根据实际结果判断是否一致，一致则通过，否则不通过]
+
+### （三）数据一致性测试
+1. **分层与不分层数据一致性测试**
+    - 测试目的：验证分层和不分层两种实现方式下数据的一致性。
+    - 测试数据：选取部分关键指标，如综合评分、销量等。
+    - 预期结果：分层和不分层实现方式下同一商品的同一指标数据一致。
+    - 测试SQL（以综合评分为例）：
+```sql
+-- 分层实现的综合评分
+SELECT product_id, total_score AS layered_total_score
+FROM ads_product_value_assessment
+WHERE dt = '2025-08-03'
+LIMIT 10;
+
+-- 不分层实现的综合评分（假设存在不分层计算的表或视图）
+SELECT product_id, total_score AS non_layered_total_score
+FROM non_layered_product_value_assessment
+WHERE dt = '2025-08-03'
+LIMIT 10;
+```
+    - 实际结果：[记录两种方式下的综合评分数据]
+    - 测试结论：[根据实际结果判断是否一致，一致则通过，否则不通过]
+
+## 五、测试记录
+|测试用例编号|测试项目|测试结果（通过/不通过）|备注|
+|----|----|----|----|
+|1|综合评分测试|[通过/不通过]|[如不通过，说明差异情况]|
+|2|评分等级测试|[通过/不通过]|[如不通过，说明差异情况]|
+|3|价格-销量比测试|[通过/不通过]|[如不通过，说明差异情况]|
+|4|访客-销量比测试|[通过/不通过]|[如不通过，说明差异情况]|
+|5|竞品平均值测试|[通过/不通过]|[如不通过，说明差异情况]|
+|6|差距比例测试|[通过/不通过]|[如不通过，说明差异情况]|
+|7|优化建议测试|[通过/不通过]|[如不通过，说明差异情况]|
+|8|分层与不分层数据一致性测试|[通过/不通过]|[如不通过，说明差异情况]|
+
+## 六、测试总结
+1. 本次测试对商品诊断看板的全品价值评估模块、单品竞争力诊断模块以及数据一致性进行了全面测试。
+2. 测试结果显示，[说明通过的测试用例情况]，[说明未通过的测试用例情况及可能原因]。
+3. 对于未通过的测试用例，建议[提出改进建议]，以便进一步优化商品诊断看板。

@@ -1,0 +1,84 @@
+
+成ADS层表设计后，需围绕需求中的**产出物要求**和**验收标准**，继续推进以下工作，确保完整交付流量主题页面分析看板：
+
+
+### 一、代码实现（核心指标计算）
+需针对看板所需的关键指标，提供**分层实现**和**不分层实现**两种SQL代码，代码需包含明确注释（注明工单编号：大数据-电商数仓-10-流量主题页面分析看板）。
+
+#### 1. 分层实现（按数仓分层规范）
+从ODS层→DWD层→DWS层→ADS层逐步计算，确保数据链路清晰：  
+- **ODS层**：存储原始日志数据（如页面访问日志、点击日志），需包含用户ID、页面ID、模块ID、访问时间、行为类型（点击/浏览）等原始字段，数据量需大于100万条。  
+- **DWD层**：对ODS层数据清洗、脱敏（如过滤无效日志、补全页面类型），生成`dwd_traffic_page_log`（页面行为明细），包含字段：`user_id`、`page_id`、`page_type`、`module_id`、`action_time`、`action_type`（click/view）等。  
+- **DWS层**：按页面+模块+日期聚合，生成`dws_traffic_page_summary`（页面汇总数据），计算每日访客数、点击量、点击人数等，包含字段：`page_id`、`module_id`、`stat_date`、`visitor_count`、`click_count`、`click_user_count`等。  
+- **ADS层**：基于DWS层数据进一步聚合，关联引导支付、下单数据，生成`ads_traffic_page_analysis`（最终看板数据），补充`guide_pay_amount`、`guide_order_buyer_count`、`data_trend_30d`等指标。  
+
+
+#### 2. 不分层实现（直接从原始数据计算）
+跳过中间层，直接从ODS层原始数据计算ADS层指标，适用于快速验证场景，SQL示例：  
+```sql
+-- 不分层实现：直接从ODS层计算ADS层指标
+INSERT INTO TABLE ads_traffic_page_analysis
+SELECT
+    page_type,
+    page_id,
+    page_name,
+    module_id,
+    module_name,
+    stat_date,
+    COUNT(DISTINCT user_id) AS visitor_count,  -- 去重访客数
+    SUM(CASE WHEN action_type = 'click' THEN 1 ELSE 0 END) AS click_count,  -- 总点击量
+    COUNT(DISTINCT CASE WHEN action_type = 'click' THEN user_id END) AS click_user_count,  -- 点击人数
+    SUM(guide_pay) AS guide_pay_amount,  -- 引导支付金额
+    COUNT(DISTINCT guide_buyer_id) AS guide_order_buyer_count,  -- 引导下单买家数
+    -- 近30天趋势（简化示例）
+    '{"trend":[]}' AS data_trend_30d
+FROM ods_traffic_raw_log
+WHERE stat_date BETWEEN date_sub(current_date(), 29) AND current_date()
+GROUP BY page_type, page_id, page_name, module_id, module_name, stat_date;
+```
+
+
+### 二、测试文档编写
+需包含**测试记录**和**测试SQL**，验证分层与不分层两种实现方式的数据一致性：  
+1. **测试场景**：覆盖核心指标（如访客数、点击量、引导支付金额）、边界情况（无点击的页面、新页面数据）。  
+2. **测试SQL**：  
+   - 分层实现结果查询：`SELECT * FROM ads_traffic_page_analysis WHERE stat_date = '2025-01-25' LIMIT 10;`  
+   - 不分层实现结果查询：`SELECT * FROM ads_traffic_page_analysis_no_layer WHERE stat_date = '2025-01-25' LIMIT 10;`  
+3. **一致性验证**：通过`JOIN`对比两种方式的指标数值，确保误差在允许范围内（如`ABS(a.visitor_count - b.visitor_count) <= 0`）。  
+
+
+### 三、性能优化
+针对ODS层百万级数据量，需制定性能优化方案并落地：  
+1. **表优化**：  
+   - ODS层、DWD层按`stat_date`分区（`PARTITIONED BY (stat_date STRING)`），减少扫描数据量。  
+   - 对高频查询字段（如`page_id`、`user_id`）建立索引（Hive可使用Bloom Filter索引）。  
+2. **SQL优化**：  
+   - 分层实现中，DWS层提前聚合，避免ADS层重复计算。  
+   - 减少`DISTINCT`嵌套，使用`GROUP BY`替代低效聚合。  
+3. **存储优化**：使用Parquet列式存储+Snappy压缩，降低IO成本。  
+
+
+### 四、上线部署与截图
+1. **上线流程**：  
+   - 部署分层/不分层SQL脚本到生产环境，配置定时任务（如每日凌晨执行，更新前一天数据）。  
+   - 验证ADS层数据更新成功（如查询最新`stat_date`的数据是否非空）。  
+2. **上线截图**：  
+   - 截取看板关键页面（如页面概览、装修诊断的点击分布），包含截图时间（如“2025-01-26 10:00”），清晰展示指标数值（如访客数12000、点击量35000）。  
+
+
+### 五、设计文档完善
+补充ADS层表设计之外的内容，确保符合验收标准：  
+1. **原始数据分析**：说明ODS层数据来源（如日志采集系统）、字段含义、数据质量问题（如缺失`page_type`的处理方案）。  
+2. **关键指标实现方案**：详细描述核心指标的计算逻辑（如“访客数=每日去重`user_id`数”“引导支付金额=页面点击后30分钟内的订单支付金额总和”）。  
+3. **性能优化方案**：列明具体优化措施（如分区键选择、压缩方式、SQL调整点）及优化效果（如查询耗时从10分钟降至2分钟）。  
+
+
+### 六、前端可视化（可选但关键）
+将ADS层数据通过可视化工具（如Superset、DataV）实现看板展示，对应需求中的“页面概览”和“装修诊断”功能：  
+- **页面概览**：按页面类型展示访客数、点击量TOP5页面的柱状图。  
+- **点击分布**：页面各模块点击量的热力图或饼图。  
+- **数据趋势**：近30天访客数、点击人数的折线图。  
+- **引导详情**：引导下单买家数与引导支付金额的关联散点图。  
+
+
+完成以上工作后，即可整理所有产出物（设计文档、代码、测试文档、上线截图），提交验收。

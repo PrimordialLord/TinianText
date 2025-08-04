@@ -1,0 +1,83 @@
+# 电商数仓-商品主题商品诊断看板设计文档
+## 一、项目基本信息
+|项目名称|电商数仓|
+| ---- | ---- |
+|工单编号|大数据-电商数仓-07-商品主题商品诊断看板|
+|创建时间|2025.1.26|
+|创建人|郭洵|
+|目标用户|电商商家|
+|核心需求|从流量、转化、内容、拉新、服务各方面了解自身商品相较市场竞品的优劣势，深入理解商品表现的各个方面，以便及时调整策略和优化，提升店铺的整体运营效率和销售业绩|
+
+## 二、功能模块设计
+### （一）全品价值评估模块
+1. **功能概述**：支持基于三种维度（评分-金额、价格-销量、访客-销量）的分析，全面了解店铺商品分布，聚焦核心商品和潜力商品进行运营。
+2. **评分模型设计**
+    - **评估维度**：包括“流量获取”“流量转化”“内容营销”“客户拉新”“服务质量”等。
+    - **评分等级划分**：按照85分以上为A级，70分-85分为B级，50分-70分为C级，50分以下为D级进行分档。
+
+### （二）单品竞争力诊断模块
+1. **功能概述**：通过比对本品和相似商品的平均表现，让商家了解自身商品在流量获取、流量转化、内容营销、客户拉新和服务质量等不同维度的表现情况，当发现商品表现低于平均时，可进行针对性优化。
+2. **单品竞争力构成**：详细展示单品竞争力评判标准五维度（流量获取、流量转化、内容营销、客户拉新、服务质量）的细分维度权重。
+
+## 三、数据模型设计
+### （一）ODS层表设计
+1. **ods_product_basic_info**
+    - 用途：存储商品基础信息原始数据，包括商品ID、名称、分类、品牌、价格等。
+    - 字段：product_id（商品ID）、product_name（商品名称）、category_id（分类ID）、category_name（分类名称）、brand_id（品牌ID）、brand_name（品牌名称）、price（价格）、raw_data（原始数据JSON）、create_time（创建时间）、dt（数据日期）。
+2. **ods_product_behavior_data**
+    - 用途：存储商品行为数据原始信息，涵盖流量、转化等相关指标。
+    - 字段：product_id（商品ID）、visitor_count（访客数）、sales_amount（销售金额）、sales_volume（销量）、conversion_rate（转化率）、new_customer_count（新增客户数）、traffic_index（流量指标）、conversion_index（转化指标）、content_index（内容指标）、new_customer_index（拉新指标）、service_index（服务指标）、raw_data（原始数据JSON）、create_time（创建时间）、dt（数据日期）。
+3. **ods_competitor_product_data**
+    - 用途：存储竞品相关数据，用于与本品进行对比分析。
+    - 字段：product_id（本品ID）、competitor_product_id（竞品ID）、dimension（对比维度）、self_value（本品指标值）、competitor_value（竞品指标值）、raw_data（原始数据JSON）、create_time（创建时间）、dt（数据日期）。
+
+### （二）DWD层表设计
+1. **dwd_product_base_detail**
+    - 用途：存储清洗后的商品基础明细数据。
+    - 字段：product_id（商品ID）、product_name（商品名称）、category_id（分类ID）、category_name（分类名称）、brand_id（品牌ID）、brand_name（品牌名称）、price（价格）、etl_time（ETL处理时间）、dt（数据日期）。
+2. **dwd_product_behavior_detail**
+    - 用途：存储清洗后的商品行为明细数据。
+    - 字段：product_id（商品ID）、visitor_count（访客数）、sales_amount（销售金额）、sales_volume（销量）、conversion_rate（转化率）、new_customer_count（新增客户数）、traffic_index（流量指标）、conversion_index（转化指标）、content_index（内容指标）、new_customer_index（拉新指标）、service_index（服务指标）、etl_time（ETL处理时间）、dt（数据日期）。
+3. **dwd_competitor_detail**
+    - 用途：存储清洗后的竞品对比明细数据。
+    - 字段：product_id（本品ID）、competitor_product_id（竞品ID）、dimension（对比维度）、self_value（本品指标值）、competitor_value（竞品指标值）、etl_time（ETL处理时间）、dt（数据日期）。
+
+### （三）DWS层表设计
+1. **dws_product_score_summary**
+    - 用途：存储商品多维度评分汇总数据。
+    - 字段：product_id（商品ID）、traffic_score（流量获取评分）、conversion_score（流量转化评分）、content_score（内容营销评分）、new_customer_score（客户拉新评分）、service_score（服务质量评分）、total_score（综合评分）、score_level（评分等级）、etl_time（ETL处理时间）、dt（数据日期）。
+2. **dws_product_operation_summary**
+    - 用途：存储商品运营指标汇总数据。
+    - 字段：product_id（商品ID）、visitor_count（访客数）、sales_amount（销售金额）、sales_volume（销量）、conversion_rate（转化率）、new_customer_count（新增客户数）、price_sales_ratio（价格-销量比）、visitor_sales_ratio（访客-销量比）、etl_time（ETL处理时间）、dt（数据日期）。
+
+### （四）ADS层表设计
+1. **ads_product_value_assessment**
+    - 用途：存储全品价值评估数据。
+    - 字段：product_id（商品ID）、product_name（商品名称）、category_name（分类名称）、total_score（综合评分）、score_level（评分等级）、price_sales_ratio（价格-销量比）、visitor_sales_ratio（访客-销量比）、sales_amount（销售金额）、sales_volume（销量）、stat_date（统计日期）、dt（数据日期）。
+2. **ads_product_competitor_diagnosis**
+    - 用途：存储单品竞争力诊断数据。
+    - 字段：product_id（本品ID）、product_name（本品名称）、competitor_product_id（竞品ID）、dimension（对比维度）、self_value（本品指标值）、competitor_avg_value（竞品平均值）、gap_ratio（差距比例）、optimization_suggestion（优化建议）、stat_date（统计日期）、dt（数据日期）。
+
+## 四、关键指标实现方案
+1. **综合评分**：基于“流量获取”“流量转化”“内容营销”“客户拉新”“服务质量”等维度的评分，通过设定各维度权重计算得出综合评分。例如，若流量获取评分权重20%、流量转化评分权重30%、内容营销评分权重10%、客户拉新评分权重20%、服务质量评分权重20%，则综合评分=流量获取评分×20% + 流量转化评分×30% + 内容营销评分×10% + 客户拉新评分×20% + 服务质量评分×20%。
+2. **评分等级**：根据综合评分进行划分，85分以上为A级，70-85分为B级，50-70分为C级，50分以下为D级。
+3. **价格-销量比**：计算公式为销量/价格，反映单位价格对应的销量情况。
+4. **访客-销量比**：计算公式为销量/访客数，反映访客到购买的转化效率。
+5. **差距比例**：计算公式为（竞品平均值-本品指标值）/竞品平均值×100%，用于衡量本品与竞品在各维度的差距。
+
+## 五、数据生成与代码实现要求
+1. 本任务必须使用spark 3.2及以上的版本，使用PySpark+Sparksql实现。
+2. 代码注释需包括工单编号：大数据-电商数仓-07-商品主题商品诊断看板。
+3. 商品诊断看板代码需实现全部指标的功能，包括不分层、分层两种实现方式，代码需有明确的注释。
+
+## 六、验收标准
+1. 商品诊断看板设计文档需包括ADS层表设计、原始数据分析、关键指标实现方案，需写出明确的实现思路。
+2. 商品诊断看板代码需实现全部指标的功能，包括不分层、分层两种实现方式，代码需有明确的注释。
+3. 商品诊断看板测试文档需含测试记录及测试sql，同时分层、不分层两种实现方式的数据需一致。
+4. 商品诊断看板上线截图需包括截图的时间，需能清晰看到指标数值。
+
+## 八、产出物
+1. 商品诊断看板设计文档。
+2. 商品诊断看板代码。
+3. 商品诊断看板测试文档。
+4. 商品诊断看板上线截图。

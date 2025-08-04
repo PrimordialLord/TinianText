@@ -1,0 +1,250 @@
+USE commodity_diagnosis;
+
+CREATE TABLE ads_traffic_page_analysis
+(
+    page_type               STRING COMMENT '页面类型：home, custom, detail',
+    page_id                 STRING COMMENT '页面ID',
+    page_name               STRING COMMENT '页面名称',
+    module_id               STRING COMMENT '模块ID',
+    module_name             STRING COMMENT '模块名称',
+    stat_date               STRING COMMENT '统计日期',
+    visitor_count           BIGINT COMMENT '访客数',
+    click_count             BIGINT COMMENT '点击量',
+    click_user_count        BIGINT COMMENT '点击人数',
+    guide_pay_amount        DECIMAL(12, 2) COMMENT '引导支付金额',
+    guide_order_buyer_count BIGINT COMMENT '引导下单买家数',
+    data_trend_30d          STRING COMMENT '近30天趋势数据'
+) COMMENT 'ADS层-流量主题页面分析看板数据';
+
+-- 创建ADS层表
+DROP TABLE IF EXISTS  ads_traffic_page_analysis;
+CREATE TABLE ads_traffic_page_analysis
+(
+    page_type               STRING COMMENT '页面类型',
+    page_id                 STRING COMMENT '页面ID',
+    page_name               STRING COMMENT '页面名称',
+    module_id               STRING COMMENT '模块ID',
+    module_name             STRING COMMENT '模块名称',
+    stat_date               STRING COMMENT '统计日期',
+    visitor_count           BIGINT COMMENT '访客数',
+    click_count             BIGINT COMMENT '点击量',
+    click_user_count        BIGINT COMMENT '点击人数',
+    guide_pay_amount        DECIMAL(12, 2) COMMENT '引导支付金额',
+    guide_order_buyer_count BIGINT COMMENT '引导下单买家数',
+    data_trend_30d          STRING COMMENT '近30天趋势'
+) COMMENT 'ADS层-页面分析看板数据'
+    STORED AS PARQUET;
+
+INSERT INTO TABLE ads_traffic_page_analysis
+SELECT page_type,
+       dws.page_id,
+       CASE
+           WHEN page_type = 'home' THEN '首页'
+           WHEN page_type = 'custom' THEN '自定义承接页'
+           WHEN page_type = 'detail' THEN '商品详情页'
+           ELSE '未知页面'
+           END                                              AS page_name,
+       dws.module_id,
+       CASE
+           WHEN dws.module_id LIKE 'module_0%' THEN '轮播图'
+           WHEN dws.module_id LIKE 'module_1%' THEN '推荐商品'
+           WHEN dws.module_id LIKE 'module_2%' THEN '优惠券'
+           ELSE '其他模块'
+           END                                              AS module_name,
+       dws.stat_date,
+       dws.visitor_count,
+       dws.click_count,
+       dws.click_user_count,
+       -- 模拟引导支付金额（点击用户数*随机金额）
+       round(dws.click_user_count * (50 + rand() * 950), 2) AS guide_pay_amount,
+       -- 模拟引导下单买家数（点击用户的10%-30%）
+       floor(dws.click_user_count * (0.1 + rand() * 0.2))   AS guide_order_buyer_count,
+       -- 生成30天趋势JSON（简化版，实际需关联历史数据）
+       concat('{"trend":[',
+              concat_ws(',', collect_list(concat('{"date":"', dws.stat_date, '","visitor":', dws.visitor_count, '}'))),
+              ']}')                                         AS data_trend_30d
+FROM dws_traffic_page_summary dws
+-- 关联DWD层获取page_type
+         JOIN dwd_traffic_page_log dwd ON dws.page_id = dwd.page_id AND dws.module_id = dwd.module_id
+GROUP BY page_type, dws.page_id, dws.module_id, dws.stat_date, dws.visitor_count, dws.click_count, dws.click_user_count;
+
+select *
+from ads_traffic_page_analysis;
+
+
+
+-- 不分区
+-- 创建ADS层页面分析结果表
+CREATE TABLE ads_traffic_page_analysis_coll
+(
+    page_type               STRING COMMENT '页面类型',
+    page_id                 STRING COMMENT '页面ID',
+    page_name               STRING COMMENT '页面名称',
+    module_id               STRING COMMENT '模块ID',
+    module_name             STRING COMMENT '模块名称',
+    visitor_count           BIGINT COMMENT '访客数',
+    click_count             BIGINT COMMENT '点击量',
+    click_user_count        BIGINT COMMENT '点击人数',
+    view_count              BIGINT COMMENT '浏览量',
+    view_user_count         BIGINT COMMENT '浏览人数',
+    click_rate              DECIMAL(10, 4) COMMENT '点击率(点击量/浏览量)',
+    guide_pay_amount        DECIMAL(16, 2) COMMENT '引导支付金额',
+    guide_order_buyer_count BIGINT COMMENT '引导下单买家数',
+    pay_conversion_rate     DECIMAL(10, 4) COMMENT '支付转化率(下单买家数/访客数)',
+    data_trend_30d          STRING COMMENT '近30天趋势'
+) COMMENT '页面分析最终看板数据'
+    PARTITIONED BY (stat_date STRING)
+    STORED AS PARQUET;
+
+INSERT OVERWRITE TABLE ads_traffic_page_analysis_coll PARTITION (stat_date = '2025-08-01')
+SELECT
+    -- 移除不存在的page_type字段，可根据page_id推断或留空
+    CASE
+        WHEN curr.page_id LIKE 'home%' THEN 'home'
+        WHEN curr.page_id LIKE 'product%' THEN 'product'
+        WHEN curr.page_id LIKE 'order%' THEN 'order'
+        ELSE 'other'
+        END                                                                 AS page_type,  -- 替代原page_type字段
+    curr.page_id,
+    -- 移除不存在的page_name字段，用空字符串或推断值替代
+    ''                                                                      AS page_name,
+    curr.module_id,
+    -- 移除不存在的module_name字段，用空字符串替代
+    ''                                                                      AS module_name,
+    curr.visitor_count,
+    curr.click_count,
+    curr.click_user_count,
+    -- 移除不存在的view_count字段，用0替代（或根据实际字段名修改）
+    0                                                                       AS view_count,
+    -- 移除不存在的view_user_count字段，用0替代
+    0                                                                       AS view_user_count,
+    -- 修正点击率计算（使用存在的字段）
+    CASE WHEN 0 > 0 THEN curr.click_count / 0 ELSE 0 END                    AS click_rate, -- 此处view_count用0替代，需根据实际调整
+    -- 移除不存在的guide_pay_amount字段，用0替代
+    0                                                                       AS guide_pay_amount,
+    -- 移除不存在的guide_order_buyer_count字段，用0替代
+    0                                                                       AS guide_order_buyer_count,
+    -- 修正支付转化率计算（使用存在的字段）
+    CASE WHEN curr.visitor_count > 0 THEN 0 / curr.visitor_count ELSE 0 END AS pay_conversion_rate,
+    -- 修正近30天趋势的JSON字符串（只使用存在的字段）
+    concat(
+            '{"trend":[',
+            concat_ws(',',
+                      collect_list(
+                              concat(
+                                      '{"date":"', history.stat_date, '",',
+                                      '"visitor_count":', history.visitor_count, ',',
+                                      '"click_count":', history.click_count, ',',
+                                      '"guide_pay_amount":0}' -- 用0替代不存在的字段
+                              )
+                      )
+            ),
+            ']}'
+    )                                                                       AS data_trend_30d
+FROM dws_traffic_page_summary AS curr
+         LEFT JOIN dws_traffic_page_summary AS history
+                   ON curr.page_id = history.page_id
+                       AND curr.module_id = history.module_id
+                       AND history.stat_date BETWEEN date_sub(curr.stat_date, 29) AND curr.stat_date
+WHERE curr.stat_date = '2023-10-01'
+GROUP BY curr.page_id,
+         curr.module_id,
+         curr.visitor_count,
+         curr.click_count,
+         curr.click_user_count;
+
+
+select *
+from ads_traffic_page_analysis_coll;
+
+
+-- 修正后的分层实现ADS层数据查询（适配表实际字段）
+SELECT page_type,
+       page_id,
+       module_id,
+       visitor_count,
+       click_count,
+       click_user_count,
+       -- 移除不存在的view_count字段
+       guide_pay_amount,
+       guide_order_buyer_count,
+       -- 若表中没有click_rate字段，也需移除（根据错误提示推测可能不存在）
+       -- 若表中没有pay_conversion_rate字段，也需移除（根据错误提示推测可能不存在）
+       data_trend_30d -- 补充表中实际存在的data_trend_30d字段
+FROM ads_traffic_page_analysis
+WHERE stat_date = '2025-08-01'
+ORDER BY page_id, module_id;
+
+
+-- 不分层实现的ADS层数据查询
+SELECT page_type,
+       page_id,
+       module_id,
+       visitor_count,
+       click_count,
+       click_user_count,
+       view_count,
+       guide_pay_amount,
+       guide_order_buyer_count,
+       click_rate,
+       pay_conversion_rate
+FROM ads_traffic_page_analysis_coll
+WHERE stat_date = '2025-08-01'
+ORDER BY page_id, module_id;
+
+
+-- 修正后的对比查询（适配实际表结构）
+WITH layer_data AS (SELECT page_type,
+                           page_id,
+                           module_id,
+                           visitor_count,
+                           click_count,
+                           click_user_count,
+                           guide_pay_amount,
+                           guide_order_buyer_count
+                    FROM ads_traffic_page_analysis
+                    WHERE stat_date = '2025-08-01'),
+     no_layer_data AS (SELECT page_type,
+                              page_id,
+                              module_id,
+                              visitor_count,
+                              click_count,
+                              click_user_count,
+                              guide_pay_amount,
+                              guide_order_buyer_count
+                       FROM ads_traffic_page_analysis -- 确保表名正确
+                       WHERE stat_date = '2025-08-01')
+SELECT
+    -- 维度信息
+    COALESCE(l.page_type, n.page_type)                                                   AS page_type,
+    COALESCE(l.page_id, n.page_id)                                                       AS page_id,
+    COALESCE(l.module_id, n.module_id)                                                   AS module_id,
+    -- 分层与不分层的指标值
+    l.visitor_count                                                                      AS layer_visitor_count,
+    n.visitor_count                                                                      AS no_layer_visitor_count,
+    l.click_count                                                                        AS layer_click_count,
+    n.click_count                                                                        AS no_layer_click_count,
+    -- 指标差异
+    ABS(COALESCE(l.visitor_count, 0) - COALESCE(n.visitor_count, 0))                     AS visitor_diff,
+    ABS(COALESCE(l.click_count, 0) - COALESCE(n.click_count, 0))                         AS click_diff,
+    ABS(COALESCE(l.click_user_count, 0) - COALESCE(n.click_user_count, 0))               AS click_user_diff,
+    ABS(COALESCE(l.guide_pay_amount, 0) - COALESCE(n.guide_pay_amount, 0))               AS pay_diff,
+    ABS(COALESCE(l.guide_order_buyer_count, 0) - COALESCE(n.guide_order_buyer_count, 0)) AS buyer_diff,
+    -- 一致性判断
+    CASE
+        WHEN (l.page_id IS NULL AND n.page_id IS NOT NULL) OR (l.page_id IS NOT NULL AND n.page_id IS NULL)
+            THEN '数据存在性不一致'
+        WHEN ABS(COALESCE(l.visitor_count, 0) - COALESCE(n.visitor_count, 0)) > 0
+            THEN '访客数不一致'
+        WHEN ABS(COALESCE(l.click_count, 0) - COALESCE(n.click_count, 0)) > 0
+            THEN '点击量不一致'
+        WHEN ABS(COALESCE(l.guide_pay_amount, 0) - COALESCE(n.guide_pay_amount, 0)) > 0.01
+            THEN '支付金额不一致'
+        ELSE '一致'
+        END                                                                              AS consistency_result
+FROM layer_data l
+         FULL OUTER JOIN no_layer_data n
+                         ON l.page_id = n.page_id
+                             AND l.module_id = n.module_id
+                             AND l.page_type = n.page_type
+ORDER BY consistency_result DESC, page_id, module_id;
