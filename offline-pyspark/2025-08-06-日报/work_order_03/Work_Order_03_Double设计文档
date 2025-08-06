@@ -1,0 +1,132 @@
+# 商品360看板设计文档
+## 一、文档说明
+本文档为电商数仓项目中商品360看板的设计文档，基于工单“大数据-电商数仓-03-商品主题商品360看板”编写，旨在明确商品360看板的ADS层表设计、原始数据分析及关键指标实现方案，为看板的开发、测试及上线提供指导。
+
+## 二、ADS层表设计
+### （一）ads_product_core_overview（商品核心概况表）
+|字段|类型|注释|
+| ---- | ---- | ---- |
+|product_id|STRING|商品ID|
+|core_data_trend|STRING|核心数据趋势（JSON格式，包含销量、销售额等）|
+|click_trend|STRING|点击趋势（JSON格式）|
+|operation_actions|STRING|运营行动（如报名新客折扣、发布短视频等）|
+|stat_date|STRING|统计日期|
+
+### （二）ads_sku_sales_analysis（SKU销售详情分析表）
+|字段|类型|注释|
+| ---- | ---- | ---- |
+|sku_id|STRING|SKU ID|
+|product_id|STRING|商品ID|
+|attribute|STRING|商品属性（如颜色、尺寸）|
+|sales_num|INT|销量|
+|sales_rank|INT|热销排名|
+|stat_date|STRING|统计日期|
+
+### （三）ads_price_analysis（价格分析表）
+|字段|类型|注释|
+| ---- | ---- | ---- |
+|product_id|STRING|商品ID|
+|price_trend|STRING|价格趋势（JSON格式）|
+|price_band_performance|STRING|不同价格带货品表现（JSON格式）|
+|category_price_distribution|STRING|类目价格带分布|
+|price_strength_star|INT|价格力星级|
+|market_benchmark|STRING|市场同类目标杆数据（JSON格式）|
+|stat_date|STRING|统计日期|
+
+### （四）ads_traffic_source_analysis（流量来源分析表）
+|字段|类型|注释|
+| ---- | ---- | ---- |
+|product_id|STRING|商品ID|
+|channel|STRING|流量渠道|
+|visitor_ratio|DOUBLE|访客占比|
+|conversion_rate|DOUBLE|转化率|
+|stat_date|STRING|统计日期|
+
+### （五）ads_title_optimization（标题优化表）
+|字段|类型|注释|
+| ---- | ---- | ---- |
+|product_id|STRING|商品ID|
+|title|STRING|商品标题|
+|root_word_analysis|STRING|词根分析（包含引流人数、转化率，JSON格式）|
+|keyword_effect|STRING|各类关键词效果（JSON格式）|
+|stat_date|STRING|统计日期|
+
+### （六）ads_content_analysis（内容分析表）
+|字段|类型|注释|
+| ---- | ---- | ---- |
+|product_id|STRING|商品ID|
+|content_type|STRING|内容类型（直播、短视频、图文）|
+|top_content_data|STRING|TOP50内容数据表现（JSON格式）|
+|stat_date|STRING|统计日期|
+
+### （七）ads_customer_insight（客群洞察表）
+|字段|类型|注释|
+| ---- | ---- | ---- |
+|product_id|STRING|商品ID|
+|search_user_portrait|STRING|搜索人群画像|
+|visit_user_portrait|STRING|访问人群画像|
+|pay_user_portrait|STRING|支付人群画像|
+|stat_date|STRING|统计日期|
+
+### （八）ads_association_analysis（关联搭配分析表）
+|字段|类型|注释|
+| ---- | ---- | ---- |
+|product_id|STRING|单品ID|
+|related_product_id|STRING|关联商品ID|
+|drainage_effect|INT|引流效果（如访客数）|
+|stat_date|STRING|统计日期|
+
+### （九）ads_service_experience（服务体验表）
+|字段|类型|注释|
+| ---- | ---- | ---- |
+|product_id|STRING|商品ID|
+|sku_id|STRING|SKU ID|
+|user_type_rating|STRING|不同人群评分（JSON格式）|
+|evaluation_trend|STRING|评价指标趋势（JSON格式）|
+|evaluation_content|STRING|评价内容|
+|stat_date|STRING|统计日期|
+
+## 三、原始数据分析
+原始数据主要来源于电商平台的业务日志和数据库，涵盖商品销售、价格变动、用户行为、评价等多个方面。
+- 商品销售数据：包括SKU的销量、销售额等信息，可用于分析SKU销售详情和商品核心概况。
+- 价格数据：记录商品价格的变化及所在类目信息，为价格分析提供基础。
+- 流量数据：包含各渠道的访客数、转化数等，支撑流量来源分析。
+- 用户行为数据：如搜索、访问、收藏、加购、支付等行为，用于客群洞察和标题优化等。
+- 内容数据：直播、短视频、图文的浏览量、互动量等，助力内容分析。
+- 评价数据：买家对商品的评分、评价内容等，是服务体验分析的关键依据。
+
+## 四、关键指标实现方案
+### （一）核心概况指标
+1. **核心数据趋势**：从商品销售原始数据中提取销量、销售额等指标，按时间维度（如日、周、月）汇总，形成趋势数据，以JSON格式存储在ads_product_core_overview表中。
+2. **点击趋势**：基于用户点击日志，统计不同时间点的点击量，汇总后形成趋势图数据，存入ads_product_core_overview表。
+
+### （二）SKU销售指标
+1. **销量**：从SKU销售原始数据中提取各SKU的销量，按日汇总到ads_sku_sales_analysis表。
+2. **热销排名**：根据各SKU的销量，在商品维度内进行排序，得到热销排名，存入ads_sku_sales_analysis表。
+
+### （三）价格分析指标
+1. **价格趋势**：从价格原始日志中获取商品不同时间的价格，按时间序列整理成趋势数据，存入ads_price_analysis表。
+2. **价格力星级**：结合商品价格、销量、评价等多方面因素，制定评分规则，计算价格力星级，存入ads_price_analysis表。
+
+### （四）流量来源指标
+1. **访客占比**：统计各渠道的访客数，除以总访客数得到访客占比，存入ads_traffic_source_analysis表。
+2. **转化率**：计算各渠道的转化数与访客数的比值，得到转化率，存入ads_traffic_source_analysis表。
+
+### （五）标题优化指标
+1. **词根引流人数和转化率**：对标题进行词根拆分，关联用户行为数据，统计每个词根带来的引流人数和转化数，计算转化率，存入ads_title_optimization表。
+2. **关键词效果**：分类统计搜索词、品类词等各类关键词的引流人数和转化率，存入ads_title_optimization表。
+
+### （六）内容分析指标
+**TOP50内容数据表现**：从内容数据中筛选出表现较好的TOP50直播、短视频和图文，提取其浏览量、互动量等数据，存入ads_content_analysis表。
+
+### （七）客群洞察指标
+**人群画像**：基于用户的搜索、访问、支付等行为数据，结合用户的基本信息（如年龄、性别、地域等），构建人群画像，存入ads_customer_insight表。
+
+### （八）关联搭配指标
+**引流效果**：分析单品详情页对店铺内其他商品的引流情况，统计关联商品的访客数等，作为引流效果指标存入ads_association_analysis表。
+
+### （九）服务体验指标
+1. **不同人群评分**：按人群类型（整体、老买家）对评价数据进行分类统计，得到不同分数层的评价数，存入ads_service_experience表。
+2. **评价指标趋势**：按时间维度统计正面评价数、负面评价数等指标，形成趋势数据，存入ads_service_experience表。
+
+以上关键指标的实现均通过对原始数据的清洗、转换、汇总计算得出，确保数据的准确性和可靠性，为电商商家提供有效的决策支持。
