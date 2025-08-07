@@ -1,0 +1,94 @@
+# 品类360看板设计文档
+## 一、项目基本信息
+|项目名称|电商数仓|
+| ---- | ---- |
+|工单编号|大数据-电商数仓-04-商品主题品类360看板|
+|创建时间|2025.1.25|
+|创建人|郭洵|
+|业务目标|帮助电商商家从销售核心概况、属性分布、品类流量来源、品类人群画像特征多维度全方位了解店铺自身品类，定位精准人群，从而选择合适的经营品类|
+
+## 二、原始数据分析
+### （一）数据来源
+数据主要来源于电商平台的业务系统，涵盖销售、属性、流量、用户行为等相关数据，具体包括：
+1. 销售数据：记录品类的销售额、销量、支付金额等信息，包含不同时间维度（日、周、月）的数据。
+2. 属性数据：品类下各属性的流量、支付转化及动销商品数等数据。
+3. 流量数据：品类的流量来源渠道信息、各渠道的访客量、转化效果以及热搜词的排名和访客量等。
+4. 用户行为数据：记录用户对品类的搜索、访问、支付等行为，以及不同行为人群的画像信息。
+
+### （二）数据特征
+1. 时间维度：数据包含日、周、月不同时间粒度，可满足不同时间维度的分析需求。
+2. 多维度性：数据从销售、属性、流量、用户行为等多个维度描述品类情况，可进行全方位分析。
+3. 关联性：各维度数据之间存在关联，如流量数据会影响销售数据，用户行为数据与流量数据相关联等。
+
+## 三、ADS层表设计
+### （一）ads_category_360_overview（品类360全景表）
+|字段名称|字段类型|注释|
+| ---- | ---- | ---- |
+|category_id|STRING|品类ID|
+|category_name|STRING|品类名称|
+|sales_overview|STRING|销售概况（JSON格式：总销售额、销量、趋势、月销售额占比、月销售排名）|
+|property_analysis|STRING|属性分析（JSON格式：有效属性、总流量、平均转化率）|
+|traffic_effect|STRING|流量效果（JSON格式：渠道占比、热搜词、渠道转化率）|
+|user_insight|STRING|人群洞察（JSON格式：核心标签、行为特征、人群画像）|
+|stat_date|STRING|统计日期|
+|dt|STRING|分区日期|
+
+### （二）ads_category_strategy_suggest（品类策略建议表）
+|字段名称|字段类型|注释|
+| ---- | ---- | ---- |
+|category_id|STRING|品类ID|
+|operation_suggest|STRING|运营建议（如渠道优化、属性拓展）|
+|crowd_targeting|STRING|人群定位建议|
+|sales_goal_progress|STRING|销售目标进度（完成率、差距）|
+|stat_date|STRING|统计日期|
+|dt|STRING|分区日期|
+
+## 四、关键指标实现方案
+### （一）销售分析指标
+1. **总销售额（total_sales_amount）**
+    - 实现思路：从DWS层的dws_category_sales_summary表中获取品类的总销售额数据。该表通过聚合DWD层销售明细数据，按品类ID分组汇总得到总销售额。
+2. **总销量（total_sales_num）**
+    - 实现思路：同样来自dws_category_sales_summary表，是按品类ID分组汇总的总销售数量。
+3. **销售额趋势（sales_trend）**
+    - 实现思路：在dws_category_sales_summary表中，通过收集近30天的每日销售额形成数组，反映销售额的变化趋势。
+4. **月销售额占比（monthly_sales_contribution）**
+    - 实现思路：在DWS层计算时，用该品类的月销售额除以店铺总月销售额得到占比，存储在dws_category_sales_summary表中。
+5. **月销售排名（monthly_rank）**
+    - 实现思路：在DWS层，根据各品类的月销售额进行排序，得到每个品类的月销售排名，存储在dws_category_sales_summary表中。
+
+### （二）属性分析指标
+1. **有效属性（effective_property）**
+    - 实现思路：从dws_category_property_summary表中获取，该表通过对DWD层属性数据按属性流量排序，取流量前3的属性作为有效属性。
+2. **总流量（total_traffic）**
+    - 实现思路：在dws_category_property_summary表中，是按品类和属性分组汇总的总流量数据，来源于DWD层属性明细的流量汇总。
+3. **平均转化率（avg_conversion_rate）**
+    - 实现思路：在dws_category_property_summary表中，通过计算该属性下的总转化量除以总流量得到平均转化率，数据来源于DWD层的转化和流量数据。
+
+### （三）流量分析指标
+1. **渠道占比（channel_distribution）**
+    - 实现思路：来自dws_category_traffic_summary表，该表通过计算各渠道的访客数占该品类总访客数的比例得到渠道占比，数据基于DWD层的访客数据。
+2. **top3热搜词（top_search_words）**
+    - 实现思路：在dws_category_traffic_summary表中，对DWD层的热搜词按访客量排序，取前3的热搜词形成数组。
+3. **渠道转化率（channel_effectiveness）**
+    - 实现思路：在dws_category_traffic_summary表中，通过各渠道的转化量除以该渠道的访客数得到渠道转化率，数据来源于DWD层的转化和访客数据。
+
+### （四）客群洞察指标
+1. **核心人群标签（core_user_tags）**
+    - 实现思路：从dws_category_user_summary表中获取，该表对DWD层用户标签数据按标签占比排序，取前3的标签作为核心人群标签。
+2. **用户行为（user_behavior）**
+    - 实现思路：在dws_category_user_summary表中，记录用户的搜索、访问、支付等行为，数据来源于DWD层的用户行为记录。
+3. **人群画像（user_portrait）**
+    - 实现思路：在dws_category_user_summary表中，通过对不同用户标签（如年龄、性别、城市等级等）的占比统计形成人群画像，数据基于DWD层的用户标签数据。
+
+### （五）策略建议指标
+1. **运营建议（operation_suggest）**
+    - 实现思路：在ads_category_strategy_suggest表中，基于渠道转化率、属性效果、销售趋势等指标，通过预设的规则生成运营建议，数据来源于各DWS层表的相关指标。
+2. **人群定位建议（crowd_targeting）**
+    - 实现思路：在ads_category_strategy_suggest表中，根据核心人群标签和用户行为特征，结合预设策略生成人群定位建议，数据来源于dws_category_user_summary表。
+3. **销售目标进度（sales_goal_progress）**
+    - 实现思路：在ads_category_strategy_suggest表中，通过计算当前销售额与目标销售额的比例得到完成率，以及目标销售额与当前销售额的差值得到差距，目标销售额设为上月销售额的1.2倍，数据来源于dws_category_sales_summary表的销售额数据。
+
+## 五、实现思路总结
+1. 数据分层实现：采用DWD、DWS、ADS三层架构。DWD层存储原始明细数据，进行数据清洗和规范；DWS层对DWD层数据按主题进行聚合，计算各维度的关键指标；ADS层则基于DWS层数据进行多维度整合，生成供看板展示的全景数据和策略建议数据。
+2. 数据处理流程：从业务系统获取原始数据到DWD层，经过清洗转换后，聚合到DWS层生成各主题的汇总指标，最后在ADS层进行数据整合和策略生成，供品类360看板展示和使用。
+3. 关键指标计算：所有关键指标均基于DWD层的原始数据，在DWS层进行汇总和计算，确保指标的准确性和一致性，ADS层主要进行数据的整合和呈现。
